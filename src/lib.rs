@@ -197,7 +197,7 @@ pub enum Hook {
 type HookLoader = unsafe fn() -> Vec<(&'static str, Hook)>;
 
 pub struct Framework {
-    //_libraries: Vec<Library>,
+    libraries: Vec<Library>,
     hosts: HostMgr,
     names: Vec<&'static str>,
     hooks: HashMap<String, Hook>,
@@ -207,7 +207,7 @@ pub struct Framework {
 impl Framework {
     pub fn new(hostmgr: HostMgr) -> Framework {
         Framework {
-            //_libraries: Vec::new(),
+            libraries: Vec::new(),
             hosts: hostmgr,
             names: Vec::new(),
             hooks: HashMap::new(),
@@ -247,19 +247,18 @@ impl Framework {
 
     pub fn load_hooks_from(&mut self, lib: Library) -> Result<(), Vec<String>> {
         let mut errors = Vec::new();
+        self.libraries.push(lib);
 
-        let load = match unsafe { lib.get::<HookLoader>(b"load") } {
-            Ok(func) => func,
+        let hooks = unsafe { match self.libraries.last().unwrap().get::<HookLoader>(b"load") {
+            Ok(load) => load(),
             Err(e) => return Err(vec![e.to_string()])
-        };
+        }};
 
-        let hooks = unsafe { load() };
         println!("DEBUG: hooks @ {:p}", &hooks);
 
         for (name, hook) in hooks.into_iter() {
-            match self.hook_up(name, hook) {
-                Err(()) => errors.push(format!("{} already bound", name)),
-                Ok(()) => ()
+            if self.hook_up(name, hook).is_err() {
+                errors.push(format!("{} already bound", name));
             }
         };
 

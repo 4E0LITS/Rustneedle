@@ -262,7 +262,7 @@ impl Framework {
         }
     }
 
-    pub fn try_run_hook(&mut self, name: &str, args: &[&str]) -> Result<bool, String> {
+    pub fn try_run_hook(&mut self, name: &str, args: &[&str]) -> Result<Option<&Module>, String> {
         let mut name = name.to_owned();
 
         if let Some(hook) = self.hooks.get(&name) {
@@ -281,11 +281,11 @@ impl Framework {
                         }
 
                         println!("[*] Started '{}'", name);
-                        self.modules.insert(name, module);
-                        Ok(true)
+                        self.modules.insert(name.clone(), module);
+                        Ok(Some(&self.modules[&name]))
                     },
 
-                    None => Ok(false)
+                    None => Ok(None)
                 },
 
                 /*

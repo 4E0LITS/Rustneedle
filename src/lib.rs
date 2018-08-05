@@ -153,7 +153,6 @@ while others may require framework level access.
 */
 
 pub enum PackFilter {
-    Closed,
     Entire(Sender<Arc<Vec<u8>>>),
     EtherFrame(Sender<Arc<Vec<u8>>>),
     Payload(Sender<Arc<Vec<u8>>>)
@@ -162,21 +161,21 @@ pub enum PackFilter {
 pub struct Module {
     handle: JoinHandle<Result<(), String>>,
     killer: Sender<()>,
-    packet_sender: Option<Sender<Vec<u8>>>,
-    filter: PackFilter,
+    packet_queue: Option<Receiver<Vec<u8>>>,
+    filter: Option<PackFilter>,
 }
 
 impl Module {
     pub fn new(
         handle: JoinHandle<Result<(), String>>,
         killer: Sender<()>,
-        packet_sender: Option<Sender<Vec<u8>>>,
-        filter: PackFilter
+        packet_queue: Option<Receiver<Vec<u8>>>,
+        filter: Option<PackFilter>
     ) -> Module {
         Module {
             handle: handle,
             killer: killer,
-            packet_sender: packet_sender,
+            packet_queue: packet_queue,
             filter:filter
         }
     }

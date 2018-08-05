@@ -13,7 +13,8 @@ use std::sync::{
     Mutex,
     MutexGuard,
     mpsc::Receiver,
-    mpsc::Sender
+    mpsc::Sender,
+    mpsc::SendError
 };
 
 extern crate libloading;
@@ -145,8 +146,8 @@ ethernet header and payload are generated, then handed to waiting modules, allow
 read them and queue packet creation requests as needed.
 
 Modules have some additional features built in: each has an mpsc::Receiver<()> whose intent is to
-be able to kill the module and cause cleanup. Each also has the option of an mpsc::Sender(vec<u8>)
-that can be used to queue packet send requests.
+be able to kill the module and cause cleanup. Each is also initialized with the option of an
+mpsc::Sender(vec<u8>) that can be used to queue packet send requests.
 
 Hooks are organized by what level information they need. Some may only need access to the HostMgr,
 while others may require framework level access.
@@ -160,9 +161,7 @@ pub enum PackFilter {
 
 pub struct Module {
     handle: JoinHandle<Result<(), String>>,
-    killer: Sender<()>,
-    packet_queue: Option<Receiver<Vec<u8>>>,
-    filter: Option<PackFilter>,
+    killer: Sender<()>
 }
 
 impl Module {
@@ -171,13 +170,19 @@ impl Module {
         killer: Sender<()>,
         packet_queue: Option<Receiver<Vec<u8>>>,
         filter: Option<PackFilter>
-    ) -> Module {
-        Module {
+    ) -> (Module, Option<Receiver<Vec<u8>>>, Option<PackFilter>) {
+        (Module {
             handle: handle,
-            killer: killer,
-            packet_queue: packet_queue,
-            filter:filter
-        }
+            killer: killer
+        }, packet_queue, filter)
+    }
+
+    pub fn handle(&mut self) -> &mut JoinHandle<Result<(), String>> {
+        &mut self.handle
+    }
+
+    pub fn kill(&mut self) -> Result<(), SendError<()>> {
+        self.killer.send(())
     }
 }
 

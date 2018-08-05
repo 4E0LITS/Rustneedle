@@ -1,0 +1,8 @@
+[package]
+name = "librustneedle"
+version = "0.1.0"
+authors = ["Aeolits <aeolits.protonmail.com>"]
+
+[dependencies]
+pnet = "0.21"
+libloading = "0.5"

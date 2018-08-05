@@ -166,6 +166,22 @@ pub struct Module {
     filter: PackFilter,
 }
 
+impl Module {
+    pub fn new(
+        handle: JoinHandle<Result<(), String>>,
+        killer: Sender<()>,
+        packet_sender: Option<Sender<Vec<u8>>>,
+        filter: PackFilter
+    ) -> Module {
+        Module {
+            handle: handle,
+            killer: killer,
+            packet_sender: packet_sender,
+            filter:filter
+        }
+    }
+}
+
 pub enum Hook { 
     Framework((fn(&[&str], &Framework) -> Result<Option<Module>, String>)),
     HostMgr((fn(&[&str], &mut HostMgr) -> Result<Option<Module>, String>))
@@ -246,7 +262,7 @@ impl Framework {
         }
     }
 
-    pub fn try_run_hook(&mut self, name: &str, args: &[&str]) -> Result<(), String> {
+    pub fn try_run_hook(&mut self, name: &str, args: &[&str]) -> Result<bool, String> {
         let mut name = name.to_owned();
 
         if let Some(hook) = self.hooks.get(&name) {
@@ -266,10 +282,10 @@ impl Framework {
 
                         println!("[*] Started '{}'", name);
                         self.modules.insert(name, module);
-                        Ok(())
+                        Ok(true)
                     },
 
-                    None => Ok(())
+                    None => Ok(false)
                 },
 
                 /*

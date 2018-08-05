@@ -254,6 +254,7 @@ impl Framework {
         };
 
         let hooks = unsafe { load() };
+        println!("DEBUG: hooks @ {:p}", &hooks);
 
         for (name, hook) in hooks.into_iter() {
             match self.hook_up(name, hook) {

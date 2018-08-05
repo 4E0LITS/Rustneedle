@@ -159,6 +159,9 @@ pub enum PackFilter {
     Payload(Sender<Arc<Vec<u8>>>)
 }
 
+type PQueueOpt = Option<Receiver<Vec<u8>>>;
+type PFilterOpt = Option<PackFilter>;
+
 pub struct Module {
     handle: JoinHandle<Result<(), String>>,
     killer: Sender<()>
@@ -168,9 +171,9 @@ impl Module {
     pub fn new(
         handle: JoinHandle<Result<(), String>>,
         killer: Sender<()>,
-        packet_queue: Option<Receiver<Vec<u8>>>,
-        filter: Option<PackFilter>
-    ) -> (Module, Option<Receiver<Vec<u8>>>, Option<PackFilter>) {
+        packet_queue: PQueueOpt,
+        filter: PFilterOpt
+    ) -> (Module, PQueueOpt, PFilterOpt) {
         (Module {
             handle: handle,
             killer: killer
@@ -186,9 +189,9 @@ impl Module {
     }
 }
 
-pub enum Hook { 
-    Framework((fn(&[&str], &Framework) -> Result<Option<Module>, String>)),
-    HostMgr((fn(&[&str], &mut HostMgr) -> Result<Option<Module>, String>))
+pub enum Hook {
+    Framework((fn(&[&str], &Framework) -> Result<Option<(Module, PQueueOpt, PFilterOpt)>, String>)),
+    HostMgr((fn(&[&str], &mut HostMgr) -> Result<Option<(Module, PQueueOpt, PFilterOpt)>, String>))
 }
 
 type HookLoader = unsafe fn() -> Vec<(&'static str, Hook)>;
@@ -266,7 +269,7 @@ impl Framework {
         }
     }
 
-    pub fn try_run_hook(&mut self, name: &str, args: &[&str]) -> Result<Option<&Module>, String> {
+    pub fn try_run_hook(&mut self, name: &str, args: &[&str]) -> Result<Option<(PQueueOpt, PFilterOpt)>, String> {
         let mut name = name.to_owned();
 
         if let Some(hook) = self.hooks.get(&name) {
@@ -275,7 +278,7 @@ impl Framework {
                 Hook::HostMgr(h) => h(args, &mut self.hosts)
             } {
                 Ok(modopt) => match modopt {
-                    Some(module) => {
+                    Some((module, pqueopt, pfilopt)) => {
                         // if name in use, find an acceptable name for new instance by incrementing
                         let mut counter = 0;
 
@@ -286,7 +289,7 @@ impl Framework {
 
                         println!("[*] Started '{}'", name);
                         self.modules.insert(name.clone(), module);
-                        Ok(Some(&self.modules[&name]))
+                        Ok(Some((pqueopt, pfilopt)))
                     },
 
                     None => Ok(None)

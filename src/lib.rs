@@ -159,8 +159,8 @@ pub enum PackFilter {
     Payload(Sender<Arc<Vec<u8>>>)
 }
 
-type PQueueOpt = Option<Receiver<Vec<u8>>>;
-type PFilterOpt = Option<PackFilter>;
+pub type PQueueOpt = Option<Receiver<Vec<u8>>>;
+pub type PFilterOpt = Option<PackFilter>;
 
 pub struct Module {
     handle: JoinHandle<Result<(), String>>,

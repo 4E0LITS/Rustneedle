@@ -122,6 +122,16 @@ impl HostMgr {
     }
 }
 
+impl Clone for HostMgr {
+    fn clone(&self) -> Self {
+        HostMgr {
+            gateway: self.gateway.clone(),
+            myself: self.myself.clone(),
+            nethosts: self.nethosts.clone()
+        }
+    }
+}
+
 /*
 Here's where it gets interesting. The meat of this program is the hook system. Hooks are defined
 either by dylibs loaded at runtime or from within the core, and represent something the user can

@@ -254,8 +254,6 @@ impl Framework {
             Err(e) => return Err(vec![e.to_string()])
         }};
 
-        println!("DEBUG: hooks @ {:p}", &hooks);
-
         for (name, hook) in hooks.into_iter() {
             if self.hook_up(name, hook).is_err() {
                 errors.push(format!("{} already bound", name));

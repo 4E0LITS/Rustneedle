@@ -197,7 +197,6 @@ pub enum Hook {
 type HookLoader = unsafe fn() -> Vec<(&'static str, Hook)>;
 
 pub struct Framework {
-    active: bool,
     libraries: Vec<Library>,
     hosts: HostMgr,
     names: Vec<&'static str>,
@@ -208,7 +207,6 @@ pub struct Framework {
 impl Framework {
     pub fn new(hostmgr: HostMgr) -> Framework {
         Framework {
-            active: true,
             libraries: Vec::new(),
             hosts: hostmgr,
             names: Vec::new(),

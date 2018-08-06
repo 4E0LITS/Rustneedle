@@ -190,7 +190,7 @@ impl Module {
 }
 
 pub enum Hook {
-    Framework((fn(&[&str], &Framework) -> Result<Option<(Module, PQueueOpt, PFilterOpt)>, String>)),
+    Framework((fn(&[&str], &mut Framework) -> Result<Option<(Module, PQueueOpt, PFilterOpt)>, String>)),
     HostMgr((fn(&[&str], &mut HostMgr) -> Result<Option<(Module, PQueueOpt, PFilterOpt)>, String>))
 }
 
@@ -270,10 +270,10 @@ impl Framework {
     pub fn try_run_hook(&mut self, name: &str, args: &[&str]) -> Result<Option<(PQueueOpt, PFilterOpt)>, String> {
         let mut name = name.to_owned();
 
-        if let Some(hook) = self.hooks.get(&name) {
-            match match hook {
-                Hook::Framework(h) => h(args, self),
-                Hook::HostMgr(h) => h(args, &mut self.hosts)
+        if self.hooks.contains_key(&name) {
+            match match self.hooks[&name] {
+                Hook::Framework(func) => func(args, self),
+                Hook::HostMgr(func) => func(args, &mut self.hosts)
             } {
                 Ok(modopt) => match modopt {
                     Some((module, pqueopt, pfilopt)) => {

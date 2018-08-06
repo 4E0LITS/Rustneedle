@@ -235,6 +235,14 @@ impl Framework {
         &self.modules
     }
 
+    pub fn is_running(&self) -> bool {
+        self.running
+    }
+
+    pub fn stop(&mut self) {
+        self.running = false
+    }
+
     // util
 
     pub fn hook_up(&mut self, name: &'static str, hook: Hook) -> Result<(), ()> {

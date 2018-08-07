@@ -171,13 +171,11 @@ impl Module {
     pub fn new(
         handle: JoinHandle<Result<(), String>>,
         killer: Sender<()>,
-        packet_queue: PQueueOpt,
-        filter: PFilterOpt
-    ) -> (Module, PQueueOpt, PFilterOpt) {
-        (Module {
+    ) -> Module {
+        Module {
             handle: handle,
             killer: killer
-        }, packet_queue, filter)
+        }
     }
 
     pub fn handle(&mut self) -> &mut JoinHandle<Result<(), String>> {
@@ -190,14 +188,16 @@ impl Module {
 }
 
 pub enum Hook {
-    Framework((fn(&[&str], &mut Framework) -> Result<Option<(Module, PQueueOpt, PFilterOpt)>, String>)),
-    HostMgr((fn(&[&str], &mut HostMgr) -> Result<Option<(Module, PQueueOpt, PFilterOpt)>, String>))
+    Framework((fn(&[&str], &mut Framework) -> Result<Option<Module>, String>)),
+    HostMgr((fn(&[&str], &mut HostMgr) -> Result<Option<Module>, String>))
 }
 
 type HookLoader = unsafe fn() -> Vec<(&'static str, Hook)>;
 
 pub struct Framework {
     running: bool,
+    filter_drop: Option<Sender<PackFilter>>,
+    pack_sender: Option<Sender<Vec<u8>>>,
     libraries: Vec<Library>,
     hosts: HostMgr,
     names: Vec<&'static str>,
@@ -209,6 +209,8 @@ impl Framework {
     pub fn new(hostmgr: HostMgr) -> Framework {
         Framework {
             running: true,
+            filter_drop: None,
+            pack_sender: None,
             libraries: Vec::new(),
             hosts: hostmgr,
             names: Vec::new(),
@@ -237,7 +239,7 @@ impl Framework {
 
     pub fn is_running(&self) -> bool {
         self.running
-    }
+    }   
 
     pub fn stop(&mut self) {
         self.running = false
@@ -277,7 +279,7 @@ impl Framework {
         }
     }
 
-    pub fn try_run_hook(&mut self, name: &str, args: &[&str]) -> Result<Option<(PQueueOpt, PFilterOpt)>, String> {
+    pub fn try_run_hook(&mut self, name: &str, args: &[&str]) -> Result<(), String> {
         let mut name = name.to_owned();
 
         if self.hooks.contains_key(&name) {
@@ -286,7 +288,7 @@ impl Framework {
                 Hook::HostMgr(func) => func(args, &mut self.hosts)
             } {
                 Ok(modopt) => match modopt {
-                    Some((module, pqueopt, pfilopt)) => {
+                    Some(module) => {
                         // if name in use, find an acceptable name for new instance by incrementing
                         let mut counter = 0;
 
@@ -297,10 +299,10 @@ impl Framework {
 
                         println!("[*] Started '{}'", name);
                         self.modules.insert(name.clone(), module);
-                        Ok(Some((pqueopt, pfilopt)))
+                        Ok(())
                     },
 
-                    None => Ok(None)
+                    None => Ok(())
                 },
 
                 /*
@@ -314,6 +316,19 @@ impl Framework {
             }
         } else {
             Err(format!("{}: No such hook", name))
+        }
+    }
+
+    pub fn init_task_mpscs(&mut self, filters: Sender<PackFilter>, sender: Sender<Vec<u8>>) {
+        self.filter_drop = Some(filters);
+        self.pack_sender = Some(sender);
+    }
+
+    pub fn try_kill(&mut self, name: &str) -> Result<Result<(), SendError<()>>, String> {
+        if let Some(module) = self.modules.get_mut(name) {
+            Ok(module.kill())
+        } else {
+            Err(format!("{}: No such module", name))
         }
     }
 }

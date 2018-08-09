@@ -27,6 +27,8 @@ use pnet::datalink::{
     ChannelType::Layer2
 };
 
+pub const BROADCAST: MacAddr = MacAddr(0xff, 0xff, 0xff, 0xff, 0xff, 0xff); 
+
 pub const DLINKCFG: Config = Config {
     write_buffer_size: 65535,
     read_buffer_size: 65535,
@@ -38,8 +40,8 @@ pub const DLINKCFG: Config = Config {
 
 /// represents an Ip and Mac address pair that must be known
 pub struct KnownPair {
-    proto: Ipv4Addr,
-    hardw: MacAddr,
+    pub proto: Ipv4Addr,
+    pub hardw: MacAddr,
 }
 
 impl KnownPair {
@@ -80,6 +82,17 @@ impl NetPairList {
     pub fn get(&self, index: usize) -> Option<&Ipv4Addr> {
         self.hosts.get(index)
     }
+
+    pub fn insert(&mut self, host: Ipv4Addr) {
+        if self.macs.insert(host, None).is_none() {
+            self.hosts.push(host);
+        }
+    }
+
+    pub fn set_host(&mut self, host: Ipv4Addr, mac: MacAddr) {
+        self.macs.insert(host, Some(mac));
+    }
+
 }
 
 /// contains safe shared references to hosts on the network
@@ -109,6 +122,8 @@ impl HostMgr {
     pub fn get_nethosts(&self) -> Arc<Mutex<NetPairList>> {
         self.nethosts.clone()
     }
+
+    //pub fn acquire(&mut self) -> (MutexGuard<>)
 
     pub fn acquire_gateway(&mut self) -> MutexGuard<KnownPair> {
         self.gateway.lock().unwrap()
@@ -153,15 +168,6 @@ Hooks are organized by what level information they need. Some may only need acce
 while others may require framework level access.
 */
 
-pub enum PackFilter {
-    Entire(Sender<Arc<Vec<u8>>>),
-    EtherFrame(Sender<Arc<Vec<u8>>>),
-    Payload(Sender<Arc<Vec<u8>>>)
-}
-
-pub type PQueueOpt = Option<Receiver<Vec<u8>>>;
-pub type PFilterOpt = Option<PackFilter>;
-
 pub struct Module {
     handle: JoinHandle<Result<(), String>>,
     killer: Sender<()>
@@ -196,8 +202,8 @@ type HookLoader = unsafe fn() -> Vec<(&'static str, Hook)>;
 
 pub struct Framework {
     running: bool,
-    filter_drop: Option<Sender<PackFilter>>,
-    pack_sender: Option<Sender<Vec<u8>>>,
+    module_drop: Option<Sender<Sender<Arc<Vec<u8>>>>>, // drop module's packet receiver to packets be passed to module
+    packet_queue: Option<Sender<Vec<u8>>>, // send packets to this to have them be sent to net
     libraries: Vec<Library>,
     hosts: HostMgr,
     names: Vec<&'static str>,
@@ -209,8 +215,8 @@ impl Framework {
     pub fn new(hostmgr: HostMgr) -> Framework {
         Framework {
             running: true,
-            filter_drop: None,
-            pack_sender: None,
+            module_drop: None,
+            packet_queue: None,
             libraries: Vec::new(),
             hosts: hostmgr,
             names: Vec::new(),
@@ -319,16 +325,32 @@ impl Framework {
         }
     }
 
-    pub fn init_task_mpscs(&mut self, filters: Sender<PackFilter>, sender: Sender<Vec<u8>>) {
-        self.filter_drop = Some(filters);
-        self.pack_sender = Some(sender);
+    pub fn init_task_mpscs(&mut self, mod_drop: Sender<Sender<Arc<Vec<u8>>>>, sender: Sender<Vec<u8>>) {
+        self.module_drop = Some(mod_drop);
+        self.packet_queue = Some(sender);
     }
 
-    pub fn try_kill(&mut self, name: &str) -> Result<Result<(), SendError<()>>, String> {
-        if let Some(module) = self.modules.get_mut(name) {
-            Ok(module.kill())
+    pub fn try_kill(&mut self, name: &str) -> Result<(), String> {
+        if let Some(mut module) = self.modules.remove(name) {
+            if module.kill().is_err() {
+                Err(format!("{}: thread has already died", name))
+            } else {
+                Ok(())
+            }
+
         } else {
             Err(format!("{}: No such module", name))
         }
+    }
+
+    pub fn insert_packet_tx(&mut self, packet_tx: Sender<Arc<Vec<u8>>>) -> Result<(), ()> {
+        match &self.module_drop {
+            Some(drop) => Ok(drop.send(packet_tx).unwrap()),
+            None => Err(())
+        }
+    }
+
+    pub fn get_packet_queue(&self) -> Option<Sender<Vec<u8>>> {
+        self.packet_queue.clone()
     }
 }
